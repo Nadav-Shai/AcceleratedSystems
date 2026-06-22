@@ -20,7 +20,7 @@ int main(int argc,char **argv)
 
     Mat gray_image;
     // CHANGED: cvtColor(image, gray_image, CV_BGR2GRAY);
-    cvtColor(image, gray_image, COLOR_BGR2GRAY);
+    cvtColor(image, gray_image, COLOR_BGR2GRAY); // Fixed
     imwrite("grayscale.png", gray_image);
 
     Size sz = gray_image.size();

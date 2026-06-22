@@ -1,4 +1,5 @@
 #include "ex1.h"
+// Done
 
 __device__ void prefix_sum(int arr[], int arr_size) {
     int tid = threadIdx.x;
