@@ -1,0 +1,245 @@
+=== Queue Server Benchmark (threads=512) ===
+
+--- load=0 (maxLoad measurement) ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1242.369308 [msec]
+
+=== CPU ===
+total time 4517.961098 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 0.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 82247.5 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+     60.6589      0.0827     60.6873    119.8839    121.0749
+
+Detected maxLoad = 82247 req/sec
+
+--- Sweep ---
+--- load=8224 ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1026.513527 [msec]
+
+=== CPU ===
+total time 3108.535660 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 8224.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 8194.1 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      0.8369      0.0554      0.5447      2.5029      2.6156
+
+--- load=16449 ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1027.359322 [msec]
+
+=== CPU ===
+total time 3116.051964 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 16449.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 16402.6 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      0.0662      0.0549      0.0654      0.0801      0.1537
+
+--- load=24674 ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1026.063461 [msec]
+
+=== CPU ===
+total time 3117.483047 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 24674.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 24596.0 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      0.0785      0.0602      0.0771      0.0992      0.1201
+
+--- load=32898 ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1026.151909 [msec]
+
+=== CPU ===
+total time 3111.734589 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 32898.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 32785.4 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      0.0725      0.0521      0.0719      0.0983      0.1848
+
+--- load=41123 ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1025.884354 [msec]
+
+=== CPU ===
+total time 3110.907349 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 41123.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 41018.0 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      0.0777      0.0517      0.0767      0.1098      0.2085
+
+--- load=49348 ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1025.826424 [msec]
+
+=== CPU ===
+total time 3116.663818 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 49348.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 49279.9 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      0.0693      0.0481      0.0682      0.0980      0.1216
+
+--- load=57572 ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1025.735085 [msec]
+
+=== CPU ===
+total time 3116.762001 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 57572.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 57457.4 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      0.0863      0.0500      0.0714      0.3579      0.4292
+
+--- load=65797 ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1025.573395 [msec]
+
+=== CPU ===
+total time 3106.285873 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 65797.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 65686.0 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      0.0820      0.0583      0.0805      0.1180      0.1395
+
+--- load=74022 ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1068.017563 [msec]
+
+=== CPU ===
+total time 4086.799217 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 74022.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 74052.8 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      0.0941      0.0666      0.0917      0.1428      0.1806
+
+--- load=82247 ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1025.987259 [msec]
+
+=== CPU ===
+total time 3106.292976 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 82247.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 82090.5 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+      0.0915      0.0620      0.0891      0.1407      0.1798
+
+--- load=164494 (2x maxLoad) ---
+Number of devices: 4
+Using device 2
+
+=== Randomizing images ===
+total time 1039.992958 [msec]
+
+=== CPU ===
+total time 5636.923309 [msec]
+
+=== Client-Server ===
+mode = queue
+load = 164494.0 (req/sec)
+threads = 512
+distance from baseline 0 (should be zero)
+throughput = 72932.9 (req/sec)
+latency [msec]:
+         avg         min      median  99th perc.         max
+     38.0697      0.0681     37.1501     75.5786     76.3336
+
