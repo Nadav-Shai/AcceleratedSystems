@@ -1,6 +1,9 @@
 #include "ex2.h"
 #include <cuda/atomic>
 
+#define SHMEM_USAGE 2048
+#define REGS_PER_THREAD 32
+
 __device__ void prefix_sum(int arr[], int arr_size) {
     // TODO complete according to hw1
     int tid = threadIdx.x;
@@ -172,40 +175,258 @@ std::unique_ptr<image_processing_server> create_streams_server()
 }
 
 // TODO implement a lock
+struct ttas_lock {
+    cuda::atomic<int, cuda::thread_scope_device> flag;
+
+    ttas_lock() : flag(0) {}
+
+    __device__ void lock() {
+        while (true) {
+            while (flag.load(cuda::memory_order_relaxed) != 0);
+
+            if (flag.exchange(1, cuda::memory_order_acquire) == 0)
+                return;
+        }
+    }
+
+    __device__ void unlock() {
+        flag.store(0, cuda::memory_order_release);
+    }
+
+};
+
 // TODO implement a MPMC queue
+struct cpu_to_gpu_slot {
+    int img_id;
+    uchar* img_in;
+    uchar* img_out;
+};
+
+struct gpu_to_cpu_slot {
+    int img_id;
+};
+
+template<typename T>
+struct mpmc_queue {
+    T* slots;
+    int size;
+    cuda::atomic<int, cuda::thread_scope_system> head;
+    cuda::atomic<int, cuda::thread_scope_system> tail;
+
+    mpmc_queue(T* slots, int size) : slots(slots), size(size), head(0), tail(0) {}
+
+    __host__ bool cpu_push(T item) {
+        int t = tail.load(cuda::memory_order_relaxed);
+        if (t - head.load(cuda::memory_order_acquire) >= size)
+            return false;
+        slots[t % size] = item;
+        tail.store(t + 1, cuda::memory_order_release);
+        return true;
+    }
+
+    __host__ bool cpu_pop(T& item) {
+        int h = head.load(cuda::memory_order_relaxed);
+        if (h >= tail.load(cuda::memory_order_acquire))
+            return false; // empty
+        item = slots[h % size];
+        head.store(h + 1, cuda::memory_order_release);
+        return true;
+    }
+
+    __device__ T gpu_pop(ttas_lock& lock) {
+        while (true) {
+            lock.lock();
+            int h = head.load(cuda::memory_order_relaxed);
+            if (h < tail.load(cuda::memory_order_acquire)) {
+                T item = slots[h % size];
+                head.store(h + 1, cuda::memory_order_release);
+                lock.unlock();
+                return item;
+            }
+            lock.unlock();
+        }
+        return T{}; // unreachable - only suppresses warning
+    }
+
+    __device__ void gpu_push(T item, ttas_lock& lock) {
+        while (true) {
+            lock.lock();
+            int t = tail.load(cuda::memory_order_relaxed);
+            if (t - head.load(cuda::memory_order_acquire) < size) {
+                slots[t % size] = item;
+                tail.store(t + 1, cuda::memory_order_release);
+                lock.unlock();
+                return;
+            }
+            lock.unlock();
+        }
+    }
+};
+
+
 // TODO implement the persistent kernel
+__global__ void queue_kernel(
+    mpmc_queue<cpu_to_gpu_slot>* requests,
+    mpmc_queue<gpu_to_cpu_slot>* responses, 
+    ttas_lock* req_lock,
+    ttas_lock* resp_lock,
+    uchar* in_bufs, // num_blocks * img_size
+    uchar* out_bufs, // num_blocks * img_size
+    uchar* maps_bufs // num blocks * maps_size
+) {
+    __shared__ cpu_to_gpu_slot req;
+    int tid = threadIdx.x;
+    size_t img_size = IMG_HEIGHT * IMG_WIDTH;
+
+    while (true) {
+        // Thread 0 dequeue, broadcast via shmem
+        if (tid == 0) {
+            req = requests->gpu_pop(*req_lock);
+        }
+        __syncthreads();
+
+        // Check for termination
+        if (req.img_id == -1) return;
+
+        // Copy input pinned -> device
+        uchar* my_in = in_bufs + blockIdx.x * img_size;
+        for (int i = tid; i < (int)img_size; i += blockDim.x) {
+            my_in[i] = req.img_in[i];
+        }
+        __syncthreads();
+        
+        // Process image
+        process_image(in_bufs, out_bufs, maps_bufs);
+        __syncthreads();
+
+        //Copy output device -> pinned
+        uchar* my_out = out_bufs + blockIdx.x * img_size;
+        for (int i = tid; i < (int)img_size; i += blockDim.x) {
+            req.img_out[i] = my_out[i]; 
+        }
+        __syncthreads();
+
+        // Thread 0 enqueues response
+        if (tid == 0 ) {
+            gpu_to_cpu_slot resp = {req.img_id};
+            responses->gpu_push(resp, *resp_lock);
+        }
+        __syncthreads();
+    }
+}
+
 // TODO implement a function for calculating the threadblocks count
+int calc_num_threadblocks(int threads_per_block) {
+    int device_id;
+    CUDA_CHECK(cudaGetDevice(&device_id));
+    cudaDeviceProp prop;
+    CUDA_CHECK(cudaGetDeviceProperties(&prop, 0));
+
+    int thread_limit = prop.maxThreadsPerMultiProcessor / threads_per_block;
+    int shmem_limit = prop.sharedMemPerMultiprocessor / SHMEM_USAGE;
+    int regs_limit = prop.regsPerMultiprocessor / (REGS_PER_THREAD * threads_per_block);
+
+    int blocksPerSM = min(thread_limit, min(shmem_limit, regs_limit));
+
+    return blocksPerSM * prop.multiProcessorCount;
+}
 
 class queue_server : public image_processing_server
 {
 private:
     // TODO define queue server context (memory buffers, etc...)
+    int num_blocks;
+    int queue_size;
+
+    // Queues in pinned host memory (GPU accesses head/tail atomics)
+    mpmc_queue<cpu_to_gpu_slot>* requests;
+    mpmc_queue<gpu_to_cpu_slot>* responses;
+
+    // Slot arrays in pinned host memory (GPU reads/writes image pointers and ids)
+    cpu_to_gpu_slot* request_slots;
+    gpu_to_cpu_slot* response_slots;
+
+    // Locks in GPU memory (GPU threads compete on these)
+    ttas_lock* req_lock;
+    ttas_lock* resp_lock;
+
+    // Per-block device buffers
+    uchar* in_bufs;
+    uchar* out_bufs;
+    uchar* maps_bufs;
+
 public:
     queue_server(int threads)
     {
-        // TODO initialize host state
+        // TODO initialize host state    
+        num_blocks = calc_num_threadblocks(threads);
+        queue_size = (int)pow(2, ceil(log2(16 * num_blocks)));
+        
+        CUDA_CHECK(cudaMallocHost(&request_slots, queue_size * sizeof(cpu_to_gpu_slot)));
+        CUDA_CHECK(cudaMallocHost(&response_slots, queue_size * sizeof(gpu_to_cpu_slot)));
+
+        CUDA_CHECK(cudaMallocHost(&requests,  sizeof(mpmc_queue<cpu_to_gpu_slot>)));
+        requests  = new (requests)  mpmc_queue<cpu_to_gpu_slot>(request_slots,  queue_size);
+        CUDA_CHECK(cudaMallocHost(&responses, sizeof(mpmc_queue<gpu_to_cpu_slot>)));
+        responses = new (responses) mpmc_queue<gpu_to_cpu_slot>(response_slots, queue_size);
+
+        CUDA_CHECK(cudaMalloc(&req_lock,  sizeof(ttas_lock)));
+        CUDA_CHECK(cudaMemset(req_lock,  0, sizeof(ttas_lock)));
+        CUDA_CHECK(cudaMalloc(&resp_lock, sizeof(ttas_lock)));
+        CUDA_CHECK(cudaMemset(resp_lock, 0, sizeof(ttas_lock)));
+
+        CUDA_CHECK(cudaMalloc(&in_bufs,   num_blocks * IMG_HEIGHT * IMG_WIDTH * sizeof(uchar)));
+        CUDA_CHECK(cudaMalloc(&out_bufs,  num_blocks * IMG_HEIGHT * IMG_WIDTH * sizeof(uchar)));
+        CUDA_CHECK(cudaMalloc(&maps_bufs, num_blocks * TILE_COUNT * TILE_COUNT * 256 * sizeof(uchar)));
+        
         // TODO launch GPU persistent kernel with given number of threads, and calculated number of threadblocks
+        queue_kernel<<<num_blocks, threads>>>(
+            requests, responses,
+            req_lock, resp_lock,
+            in_bufs, out_bufs, maps_bufs
+        );
     }
 
     ~queue_server() override
     {
         // TODO free resources allocated in constructor
+        cpu_to_gpu_slot sentinel = {-1, nullptr, nullptr};
+        for (int i = 0; i < num_blocks; i++) {
+            while (!requests->cpu_push(sentinel));
+        }
+
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        CUDA_CHECK(cudaFree(maps_bufs));
+        CUDA_CHECK(cudaFree(out_bufs));
+        CUDA_CHECK(cudaFree(in_bufs));
+        CUDA_CHECK(cudaFree(resp_lock));
+        CUDA_CHECK(cudaFree(req_lock));
+        responses->~mpmc_queue();
+        CUDA_CHECK(cudaFreeHost(responses));
+        requests->~mpmc_queue();
+        CUDA_CHECK(cudaFreeHost(requests));
+        CUDA_CHECK(cudaFreeHost(response_slots));
+        CUDA_CHECK(cudaFreeHost(request_slots));
     }
 
     bool enqueue(int img_id, uchar *img_in, uchar *img_out) override
     {
         // TODO push new task into queue if possible
-        return false;
+        cpu_to_gpu_slot req = {img_id, img_in, img_out};
+        return requests->cpu_push(req);
     }
 
     bool dequeue(int *img_id) override
     {
-        // TODO query (don't block) the producer-consumer queue for any responses.
-        return false;
-
+        // TODO query (don't block) the producer-consumer queue for any responses.        
         // TODO return the img_id of the request that was completed.
-        //*img_id = ... 
-        return true;
+        gpu_to_cpu_slot resp;
+        if (responses->cpu_pop(resp)) {
+            *img_id = resp.img_id;
+            return true;
+        }
+        return false;
     }
 };
 
